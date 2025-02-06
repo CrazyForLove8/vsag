@@ -66,7 +66,7 @@ IndexNode::IndexNode(IndexCommonParam* common_param, GraphInterfaceParamPtr grap
     : ids_(common_param->allocator_.get()),
       children_(common_param->allocator_.get()),
       common_param_(common_param),
-      graph_param_(graph_param) {
+      graph_param_(std::move(graph_param)) {
     graph_ = GraphInterface::MakeInstance(graph_param_, *common_param_, true);
 }
 
@@ -165,8 +165,8 @@ Pyramid::Build(const DatasetPtr& base) {
         std::string current_path = path[i];
         auto path_slices = split(current_path, PART_SLASH);
         std::shared_ptr<IndexNode> node = root_;
-        for (int j = 0; j < path_slices.size(); ++j) {
-            node = node->GetChild(path_slices[j], true);
+        for (auto& path_slice : path_slices) {
+            node = node->GetChild(path_slice, true);
             node->ids_.push_back(i);
         }
     }
@@ -289,8 +289,8 @@ Pyramid::search_impl(const DatasetPtr& query, int64_t limit, const SearchFunc& s
     std::string current_path = path[0];
     auto path_slices = split(current_path, PART_SLASH);
     std::shared_ptr<IndexNode> node = root_;
-    for (int j = 0; j < path_slices.size(); ++j) {
-        node = node->GetChild(path_slices[j], false);
+    for (auto& path_slice : path_slices) {
+        node = node->GetChild(path_slice, false);
         if (node == nullptr) {
             auto ret = Dataset::Make();
             ret->Dim(0)->NumElements(1);
