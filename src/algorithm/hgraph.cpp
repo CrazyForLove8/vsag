@@ -385,7 +385,7 @@ HGraph::search_one_graph(const float* query,
 
         auto current_node_id = current_node_pair.second;
         {
-            LockGuard(neighbors_mutex_, current_node_id);
+            SharedLock lock(neighbors_mutex_, current_node_id);
             graph->GetNeighbors(current_node_id, neighbors);
         }
         if (!neighbors.empty()) {

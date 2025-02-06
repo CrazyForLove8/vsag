@@ -24,24 +24,19 @@ namespace vsag {
 class MutexStrategy {
 public:
     virtual void
-    Lock(uint32_t i) {
-    }
+    Lock(uint32_t i) = 0;
 
     virtual void
-    Unlock(uint32_t i) {
-    }
+    Unlock(uint32_t i) = 0;
 
     virtual void
-    SharedLock(uint32_t i) {
-    }
+    SharedLock(uint32_t i) = 0;
 
     virtual void
-    SharedUnlock(uint32_t i) {
-    }
+    SharedUnlock(uint32_t i) = 0;
 
     virtual void
-    Resize(uint32_t new_element_num) {
-    }
+    Resize(uint32_t new_element_num) = 0;
 };
 
 using MutexStrategyPtr = std::shared_ptr<MutexStrategy>;
