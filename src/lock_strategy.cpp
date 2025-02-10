@@ -18,32 +18,43 @@
 namespace vsag {
 
 PointsMutex::PointsMutex(uint32_t element_num, Allocator* allocator)
-    : allocator_(allocator), neighbors_mutex_(element_num, allocator) {
+    : allocator_(allocator),
+      neighbors_mutex_(element_num, nullptr, allocator),
+      element_num_(element_num) {
+    for (int i = 0; i < element_num_; ++i) {
+        neighbors_mutex_[i] = std::make_shared<std::shared_mutex>();
+    }
 }
 
 void
 PointsMutex::SharedLock(uint32_t i) {
-    neighbors_mutex_[i].lock_shared();
+    neighbors_mutex_[i]->lock_shared();
 }
 
 void
 PointsMutex::SharedUnlock(uint32_t i) {
-    neighbors_mutex_[i].unlock_shared();
+    neighbors_mutex_[i]->unlock_shared();
 }
 
 void
 PointsMutex::Lock(uint32_t i) {
-    neighbors_mutex_[i].lock();
+    neighbors_mutex_[i]->lock();
 }
 
 void
 PointsMutex::Unlock(uint32_t i) {
-    neighbors_mutex_[i].unlock();
+    neighbors_mutex_[i]->unlock();
 }
 
 void
 PointsMutex::Resize(uint32_t new_element_num) {
-    Vector<std::shared_mutex>(new_element_num, allocator_).swap(neighbors_mutex_);
+    neighbors_mutex_.resize(new_element_num);
+    if (new_element_num > element_num_) {
+        for (auto i = element_num_; i < new_element_num; ++i) {
+            neighbors_mutex_[i] = std::make_shared<std::shared_mutex>();
+        }
+    }
+    element_num_ = new_element_num;
 }
 
 }  // namespace vsag

@@ -21,7 +21,7 @@
 
 namespace vsag {
 
-class MutexStrategy {
+class MutexArray {
 public:
     virtual void
     Lock(uint32_t i) = 0;
@@ -39,9 +39,9 @@ public:
     Resize(uint32_t new_element_num) = 0;
 };
 
-using MutexStrategyPtr = std::shared_ptr<MutexStrategy>;
+using MutexStrategyPtr = std::shared_ptr<MutexArray>;
 
-class PointsMutex : public MutexStrategy {
+class PointsMutex : public MutexArray {
 public:
     PointsMutex(uint32_t element_num, Allocator* allocator);
 
@@ -61,8 +61,9 @@ public:
     Resize(uint32_t new_element_num) override;
 
 private:
-    Vector<std::shared_mutex> neighbors_mutex_;
-    Allocator* allocator_;
+    Vector<std::shared_ptr<std::shared_mutex>> neighbors_mutex_;
+    Allocator* allocator_{nullptr};
+    uint32_t element_num_{0};
 };
 
 class SharedLock {
