@@ -38,7 +38,7 @@ PointsMutex::Lock(uint32_t i) {
 
 void
 PointsMutex::Unlock(uint32_t i) {
-    neighbors_mutex_[i].unlock_shared();
+    neighbors_mutex_[i].unlock();
 }
 
 void
