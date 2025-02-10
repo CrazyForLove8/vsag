@@ -314,7 +314,7 @@ Pyramid::search_impl(const DatasetPtr& query, int64_t limit, const SearchFunc& s
     result->Ids(ids);
     auto* dists = (float*)common_param_.allocator_->Allocate(sizeof(float) * target_size);
     result->Distances(dists);
-    for (auto j = target_size - 1; j >= 0; --j) {
+    for (int64_t j = target_size - 1; j >= 0; --j) {
         if (j < target_size) {
             dists[j] = search_result.top().first;
             ids[j] = labels_[search_result.top().second];
