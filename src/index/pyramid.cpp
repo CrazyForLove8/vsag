@@ -94,14 +94,12 @@ IndexNode::GetChild(const std::string& key, bool need_init) {
     auto result = children_.find(key);
     if (result != children_.end()) {
         return result->second;
-    } else {
-        if (not need_init) {
-            return nullptr;
-        } else {
-            AddChild(key);
-            return children_[key];
-        }
     }
+    if (not need_init) {
+        return nullptr;
+    }
+    AddChild(key);
+    return children_[key];
 }
 
 void
@@ -285,7 +283,7 @@ Pyramid::range_search(const DatasetPtr& query,
 
 tl::expected<DatasetPtr, Error>
 Pyramid::search_impl(const DatasetPtr& query, int64_t limit, const SearchFunc& search_func) const {
-    auto path = query->GetPaths();  // TODO(inabao): provide different search modes.
+    const auto* path = query->GetPaths();  // TODO(inabao): provide different search modes.
     std::string current_path = path[0];
     auto path_slices = split(current_path, PART_SLASH);
     std::shared_ptr<IndexNode> node = root_;
@@ -304,7 +302,7 @@ Pyramid::search_impl(const DatasetPtr& query, int64_t limit, const SearchFunc& s
 
     // return result
     auto result = Dataset::Make();
-    size_t target_size = search_result.size();
+    int64_t target_size = static_cast<int64_t>(search_result.size());
     if (target_size == 0) {
         result->Dim(0)->NumElements(1);
         return result;
@@ -314,7 +312,7 @@ Pyramid::search_impl(const DatasetPtr& query, int64_t limit, const SearchFunc& s
     result->Ids(ids);
     auto* dists = (float*)common_param_.allocator_->Allocate(sizeof(float) * target_size);
     result->Distances(dists);
-    for (int64_t j = target_size - 1; j >= 0; --j) {
+    for (auto j = target_size - 1; j >= 0; --j) {
         if (j < target_size) {
             dists[j] = search_result.top().first;
             ids[j] = labels_[search_result.top().second];
@@ -333,7 +331,7 @@ Pyramid::Serialize() const {
     size_t num_bytes = this->cal_serialize_size();
     try {
         std::shared_ptr<int8_t[]> bin(new int8_t[num_bytes]);
-        auto buffer = reinterpret_cast<char*>(const_cast<int8_t*>(bin.get()));
+        auto* buffer = reinterpret_cast<char*>(const_cast<int8_t*>(bin.get()));
         BufferStreamWriter writer(buffer);
         this->Serialize(writer);
         Binary b{

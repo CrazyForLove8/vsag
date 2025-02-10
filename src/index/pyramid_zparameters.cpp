@@ -27,7 +27,7 @@ PyramidParameters::FromJson(const JsonType& json) {
     // init graph param
     CHECK_ARGUMENT(json.contains(GRAPH_TYPE_ODESCENT),
                    fmt::format("pyramid parameters must contains {}", GRAPH_TYPE_ODESCENT));
-    auto& graph_json = json[GRAPH_TYPE_ODESCENT];
+    const auto& graph_json = json[GRAPH_TYPE_ODESCENT];
     graph_param = GraphInterfaceParameter::GetGraphParameterByJson(graph_json);
     // FIXME(inabao): This issue, where the edge length in the sparse graph defined in HGraph is half of the intended length, has been addressed here and will be revised in a subsequent PR.
     max_degree = std::dynamic_pointer_cast<GraphDataCellParameter>(graph_param)->max_degree_;
@@ -77,7 +77,7 @@ PyramidSearchParameters::FromJson(const std::string& json_string) {
         params[INDEX_PYRAMID].contains(HNSW_PARAMETER_EF_RUNTIME),
         fmt::format("parameters[{}] must contains {}", INDEX_PYRAMID, HNSW_PARAMETER_EF_RUNTIME));
     obj.ef_search = params[INDEX_PYRAMID][HNSW_PARAMETER_EF_RUNTIME];
-    CHECK_ARGUMENT((1 <= obj.ef_search) and (obj.ef_search <= 1000),
+    CHECK_ARGUMENT(obj.ef_search >= 1 && obj.ef_search <= 1000,
                    fmt::format("ef_search({}) must in range[1, 1000]", obj.ef_search));
     return obj;
 }
