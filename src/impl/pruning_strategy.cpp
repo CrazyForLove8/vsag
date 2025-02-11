@@ -99,9 +99,6 @@ mutually_connect_new_element(InnerIdType cur_c,
         if (sz_link_list_other > max_size) {
             throw std::runtime_error("Bad value of sz_link_list_other");
         }
-
-        bool is_cur_c_present = false;
-
         // If cur_c is already present in the neighboring connections of `selected_neighbors[idx]` then no need to modify any connections or run the heuristics.
         if (sz_link_list_other < max_size) {
             neighbors.emplace_back(cur_c);
