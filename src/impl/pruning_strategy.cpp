@@ -34,8 +34,9 @@ select_edges_by_heuristic(MaxHeap& edges,
     }
 
     while (not queue_closest.empty()) {
-        if (return_list.size() >= max_size)
+        if (return_list.size() >= max_size) {
             break;
+        }
         std::pair<float, InnerIdType> curent_pair = queue_closest.top();
         float float_query = -curent_pair.first;
         queue_closest.pop();
@@ -67,9 +68,10 @@ mutually_connect_new_element(InnerIdType cur_c,
                              Allocator* allocator) {
     const size_t max_size = graph->MaximumDegree();
     select_edges_by_heuristic(top_candidates, max_size, flatten, allocator);
-    if (top_candidates.size() > max_size)
+    if (top_candidates.size() > max_size) {
         throw std::runtime_error(
             "Should be not be more than max_size candidates returned by the heuristic");
+    }
 
     Vector<InnerIdType> selected_neighbors(allocator);
     selected_neighbors.reserve(max_size);
@@ -83,8 +85,9 @@ mutually_connect_new_element(InnerIdType cur_c,
     graph->InsertNeighborsById(cur_c, selected_neighbors);
 
     for (auto selected_neighbor : selected_neighbors) {
-        if (selected_neighbor == cur_c)
+        if (selected_neighbor == cur_c) {
             throw std::runtime_error("Trying to connect an element to itself");
+        }
 
         LockGuard lock(neighbors_mutexs, selected_neighbor);
 
@@ -93,8 +96,9 @@ mutually_connect_new_element(InnerIdType cur_c,
 
         size_t sz_link_list_other = neighbors.size();
 
-        if (sz_link_list_other > max_size)
+        if (sz_link_list_other > max_size) {
             throw std::runtime_error("Bad value of sz_link_list_other");
+        }
 
         bool is_cur_c_present = false;
 
