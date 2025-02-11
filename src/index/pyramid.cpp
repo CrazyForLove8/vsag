@@ -302,7 +302,7 @@ Pyramid::search_impl(const DatasetPtr& query, int64_t limit, const SearchFunc& s
 
     // return result
     auto result = Dataset::Make();
-    int64_t target_size = static_cast<int64_t>(search_result.size());
+    auto target_size = static_cast<int64_t>(search_result.size());
     if (target_size == 0) {
         result->Dim(0)->NumElements(1);
         return result;
