@@ -64,6 +64,42 @@ ODescent::Build(const uint32_t* valid_ids, int64_t data_num) {
     return true;
 }
 
+bool
+ODescent::Build(Vector<Linklist>& graph_data) {
+    if (is_build_) {
+        return false;
+    }
+    is_build_ = true;
+    graph = std::move(graph_data);
+    data_num_ = flatten_interface_->TotalCount();
+    if (data_num_ <= 1) {
+        throw std::runtime_error("ODescent cannot build a graph with data_num less than 1");
+    }
+    min_in_degree_ = std::min(min_in_degree_, data_num_ - 1);
+    Vector<std::mutex>(data_num_, allocator_).swap(points_lock_);
+    Vector<UnorderedSet<uint32_t>> old_neighbors(allocator_);
+    Vector<UnorderedSet<uint32_t>> new_neighbors(allocator_);
+    old_neighbors.resize(data_num_, UnorderedSet<uint32_t>(allocator_));
+    new_neighbors.resize(data_num_, UnorderedSet<uint32_t>(allocator_));
+    for (int i = 0; i < data_num_; ++i) {
+        old_neighbors[i].reserve(max_degree_);
+        new_neighbors[i].reserve(max_degree_);
+    }
+    init_external_graph();
+    {
+        for (int i = 0; i < turn_; ++i) {
+            sample_candidates(old_neighbors, new_neighbors, sample_rate_);
+            update_neighbors(old_neighbors, new_neighbors);
+            repair_no_in_edge();
+        }
+        if (pruning_) {
+            prune_graph();
+            add_reverse_edges();
+        }
+    }
+    return true;
+}
+
 void
 ODescent::SaveGraph(std::stringstream& out) {
     std::streamoff file_offset = 0;  // we will use this if we want
@@ -127,6 +163,32 @@ ODescent::init_graph() {
         }
     };
     parallelize_task(task);
+}
+
+void
+ODescent::init_external_graph() {
+    for (int64_t i = 0; i < data_num_; ++i) {
+        auto& neighbors = graph[i].neighbors;
+        std::sort(neighbors.begin(), neighbors.end());
+        neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+        if (neighbors.size() > max_degree_) {
+            neighbors.resize(max_degree_);
+        }
+        graph[i].greast_neighbor_distance = neighbors.back().distance;
+    }
+
+//    auto task = [&, this](int64_t start, int64_t end) {
+//        for (int64_t i = start; i < end; ++i) {
+//            auto& neighbors = graph[i].neighbors;
+//            std::sort(neighbors.begin(), neighbors.end());
+//            neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+//            if (neighbors.size() > max_degree_) {
+//                neighbors.resize(max_degree_);
+//            }
+//            graph[i].greast_neighbor_distance = neighbors.back().distance;
+//        }
+//    };
+//    parallelize_task(task);
 }
 
 void

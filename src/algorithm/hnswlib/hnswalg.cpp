@@ -16,7 +16,6 @@
 #include "hnswalg.h"
 
 #include <memory>
-
 #include "../../utils.h"
 #include "data_cell/graph_interface.h"
 namespace hnswlib {

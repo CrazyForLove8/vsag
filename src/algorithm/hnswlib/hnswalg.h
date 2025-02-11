@@ -423,5 +423,22 @@ public:
 
     bool
     init_memory_space() override;
+
+    size_t
+    getMaxLevel() const {
+        std::shared_lock lock(max_level_mutex_);
+        return max_level_;
+    }
+
+    size_t
+    getNodesAtLayer(size_t layer) const {
+        size_t count = 0;
+        for (int i = 0; i < cur_element_count_; ++i) {
+            if (element_levels_[i] == layer) {
+                count++;
+            }
+        }
+        return count;
+    }
 };
 }  // namespace hnswlib
