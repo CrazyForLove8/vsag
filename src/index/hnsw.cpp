@@ -27,6 +27,8 @@
 #include "common.h"
 #include "data_cell/flatten_datacell.h"
 #include "data_cell/graph_datacell_parameter.h"
+#include "impl/basic_searcher.h"
+#include "impl/odescent_graph_builder.h"
 #include "index/hnsw_zparameters.h"
 #include "io/memory_block_io_parameter.h"
 #include "io/memory_io_parameter.h"
@@ -1050,23 +1052,83 @@ extract_data_and_graph(const std::vector<MergeUnit>& merge_units,
                        FlattenInterfacePtr& data,
                        GraphInterfacePtr& graph,
                        Vector<LabelType>& ids,
+                       Vector<std::pair<int64_t, int64_t>>& meta_graphs,
                        Allocator* allocator) {
+    int cnt = 1;
     for (const auto& merge_unit : merge_units) {
         auto stat_string = merge_unit.index->GetStats();
         auto stats = JsonType::parse(stat_string);
         std::string index_name = stats[STATSTIC_INDEX_NAME];
         auto hnsw = std::dynamic_pointer_cast<HNSW>(merge_unit.index);
+        meta_graphs.emplace_back(cnt++, data->total_count_);
         hnsw->ExtractDataAndGraph(data, graph, ids, merge_unit.id_map_func, allocator);
+    }
+}
+
+bool
+HNSW::CrossQuery(FlattenInterfacePtr& data,
+                 GraphInterfacePtr& graph,
+                 Vector<std::pair<int64_t, int64_t>>& meta_graphs,
+                 Vector<Linklist>& merged_graph,
+                 int64_t idx = 0) {
+    if (use_static_) {
+        return false;
+    }
+    auto hnsw = std::static_pointer_cast<hnswlib::HierarchicalNSW>(alg_hnsw_);
+    auto cur_element_count = hnsw->getCurrentElementCount();
+
+    InnerSearchParam search_param;
+    search_param.ef_ = 100;
+    search_param.topk_ = 10;
+    search_param.is_id_allowed_ = nullptr;
+    auto searcher = std::make_shared<BasicSearcher>(index_common_param_);
+    auto init_size = 10;
+    auto pool = std::make_shared<VisitedListPool>(
+        init_size, allocator_.get(), data->TotalCount(), allocator_.get());
+
+    for (auto i = 0; i < meta_graphs.size(); ++i) {
+        if (i == idx) {
+            continue;
+        }
+        auto& ep = meta_graphs[i].second;
+        auto& cur_offset = meta_graphs[idx].second;
+        search_param.ep_ = ep;
+        for (auto u = 0; u < cur_element_count; ++u) {
+            auto vector_data = hnsw->getDataByInternalId(u);
+            auto vl = pool->TakeOne();
+            MaxHeap result = searcher->Search(
+                graph, data, vl, reinterpret_cast<float*>(vector_data), search_param);
+            while (!result.empty()) {
+                auto neighbor_id = result.top().second;
+                auto dist = result.top().first;
+                merged_graph[u + cur_offset].neighbors.emplace_back(neighbor_id, dist);
+                result.pop();
+            }
+        }
+    }
+    return true;
+}
+
+void
+cross_query(const std::vector<MergeUnit>& merge_units,
+            FlattenInterfacePtr& data,
+            GraphInterfacePtr& graph,
+            Vector<std::pair<int64_t, int64_t>>& meta_graphs,
+            Vector<Linklist>& merged_graph) {
+    int cnt = 1;
+    for (auto& merge_unit : merge_units) {
+        auto hnsw = std::dynamic_pointer_cast<HNSW>(merge_unit.index);
+        hnsw->CrossQuery(data, graph, meta_graphs, merged_graph, cnt++);
     }
 }
 
 tl::expected<void, Error>
 HNSW::merge(const std::vector<MergeUnit>& merge_units) {
     auto param = std::make_shared<FlattenDataCellParameter>();
-    param->io_parameter_ = std::make_shared<MemoryBlockIOParameter>();
+    param->io_parameter_ = std::make_shared<MemoryIOParameter>();
     param->quantizer_parameter_ = std::make_shared<FP32QuantizerParameter>();
     GraphDataCellParamPtr graph_param_ptr = std::make_shared<GraphDataCellParameter>();
-    graph_param_ptr->io_parameter_ = std::make_shared<vsag::MemoryBlockIOParameter>();
+    graph_param_ptr->io_parameter_ = std::make_shared<vsag::MemoryIOParameter>();
     graph_param_ptr->max_degree_ = max_degree_ * 2;
 
     FlattenInterfacePtr flatten_interface =
@@ -1078,12 +1140,63 @@ HNSW::merge(const std::vector<MergeUnit>& merge_units) {
     IdMapFunction id_map = [](int64_t id) -> std::tuple<bool, int64_t> {
         return std::make_tuple(true, id);
     };
+
+    Vector<std::pair<int64_t, int64_t>> meta_graphs(allocator_.get());
+    meta_graphs.reserve(1 + merge_units.size());
+    meta_graphs.emplace_back(0, 0);  // entrypoint for current index is 0
     this->ExtractDataAndGraph(flatten_interface, graph_interface, ids, id_map, allocator_.get());
-    extract_data_and_graph(merge_units, flatten_interface, graph_interface, ids, allocator_.get());
+    extract_data_and_graph(
+        merge_units, flatten_interface, graph_interface, ids, meta_graphs, allocator_.get());
+
     // TODO(inabao): merge graph
+    Vector<Linklist> temp_merged_graph(allocator_.get());
+    temp_merged_graph.resize(flatten_interface->total_count_,
+                             Linklist(reinterpret_cast<Allocator*&>(allocator_)));
+    for (auto& vertex : temp_merged_graph) {
+        vertex.neighbors.reserve(max_degree_ * (2 + merge_units.size()));
+    }
+
+    for (auto i = 0; i < flatten_interface->total_count_; ++i) {
+        Vector<InnerIdType> neighbors(allocator_.get());
+        graph_interface->GetNeighbors(i, neighbors);
+        for (auto&& neighbor_id : neighbors) {
+            auto dist = flatten_interface->ComputePairVectors(i, neighbor_id);
+            temp_merged_graph[i].neighbors.emplace_back(neighbor_id, dist);
+        }
+    }
+
+    this->CrossQuery(flatten_interface, graph_interface, meta_graphs, temp_merged_graph);
+    cross_query(merge_units, flatten_interface, graph_interface, meta_graphs, temp_merged_graph);
+
+    vsag::ODescent descent_graph(graph_param_ptr->max_degree_,
+                                 1,
+                                 30,
+                                 0.3,
+                                 flatten_interface,
+                                 index_common_param_.allocator_.get(),
+                                 index_common_param_.thread_pool_.get(),
+                                 true);
+
+    descent_graph.Build(temp_merged_graph);  // temp_merged_graph will be destroyed after this call
+
+    GraphInterfacePtr merged_graph_interface =
+        GraphInterface::MakeInstance(graph_param_ptr, index_common_param_, false);
+    descent_graph.SaveGraph(merged_graph_interface);
+
     // set graph
-    SetDataAndGraph(flatten_interface, graph_interface, ids);
+    SetDataAndGraph(flatten_interface, merged_graph_interface, ids);
     return {};
+}
+
+void
+HNSW::PrintGraphStats() const {
+    auto hnsw = std::static_pointer_cast<hnswlib::HierarchicalNSW>(alg_hnsw_);
+    std::cout << "-------------------" << std::endl;
+    for (size_t level = 0; level <= hnsw->getMaxLevel(); ++level) {
+        auto nodes = hnsw->getNodesAtLayer(level);
+        std::cout << "level: " << level << " nodes: " << nodes << std::endl;
+    }
+    std::cout << "-------------------" << std::endl;
 }
 
 }  // namespace vsag

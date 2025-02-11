@@ -1011,3 +1011,68 @@ TEST_CASE("extract/set data and graph", "[ut][hnsw]") {
     float recall = correct / (float)num_elements;
     REQUIRE(recall > 0.99);
 }
+
+TEST_CASE("merge graphs", "[ut][hnsw]") {
+    logger::set_level(logger::level::debug);
+
+    int64_t dim = 128;
+    IndexCommonParam common_params;
+    common_params.dim_ = dim;
+    common_params.data_type_ = DataTypes::DATA_TYPE_FLOAT;
+    common_params.metric_ = MetricType::METRIC_TYPE_L2SQR;
+    common_params.allocator_ = SafeAllocator::FactoryDefaultAllocator();
+    common_params.thread_pool_ = SafeThreadPool::FactoryDefaultThreadPool();
+
+    HnswParameters hnsw_obj = parse_hnsw_params(common_params);
+    hnsw_obj.max_degree = 10;
+    hnsw_obj.ef_construction = 100;
+
+    const int64_t num_elements = 1000;
+    auto [labels1, vectors1] = fixtures::generate_ids_and_vectors(num_elements, dim, true);
+    auto [labels2, vectors2] = fixtures::generate_ids_and_vectors(num_elements, dim, true, 42);
+    auto [labels3, vectors3] = fixtures::generate_ids_and_vectors(num_elements, dim, true, 37);
+
+    std::vector<MergeUnit> merge_units;
+    IdMapFunction id_map = [](int64_t id) -> std::tuple<bool, int64_t> {
+        return std::make_tuple(true, id);
+    };
+
+    auto dataset1 = Dataset::Make();
+    dataset1->Dim(dim)
+        ->NumElements(num_elements)
+        ->Ids(labels1.data())
+        ->Float32Vectors(vectors1.data())
+        ->Owner(false);
+    auto dataset2 = Dataset::Make();
+    dataset2->Dim(dim)
+        ->NumElements(num_elements)
+        ->Ids(labels2.data())
+        ->Float32Vectors(vectors2.data())
+        ->Owner(false);
+    auto dataset3 = Dataset::Make();
+    dataset3->Dim(dim)
+        ->NumElements(num_elements)
+        ->Ids(labels3.data())
+        ->Float32Vectors(vectors3.data())
+        ->Owner(false);
+
+    auto index = std::make_shared<HNSW>(hnsw_obj, common_params);
+    index->InitMemorySpace();
+    auto result = index->Build(dataset1);
+    REQUIRE(result.has_value());
+
+    auto another_index = std::make_shared<HNSW>(hnsw_obj, common_params);
+    another_index->InitMemorySpace();
+    auto result2 = another_index->Build(dataset2);
+    REQUIRE(result2.has_value());
+    merge_units.push_back({another_index, id_map});
+
+    auto third_index = std::make_shared<HNSW>(hnsw_obj, common_params);
+    third_index->InitMemorySpace();
+    auto result3 = third_index->Build(dataset3);
+    REQUIRE(result3.has_value());
+    merge_units.push_back({third_index, id_map});
+
+    auto merge_result = index->Merge(merge_units);
+
+}

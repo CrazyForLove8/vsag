@@ -35,6 +35,7 @@
 #include "data_type.h"
 #include "hnsw_zparameters.h"
 #include "impl/conjugate_graph.h"
+#include "impl/odescent_graph_builder.h"
 #include "index_common_param.h"
 #include "index_feature_list.h"
 #include "logger.h"
@@ -226,7 +227,17 @@ public:
                         Allocator* allocator);
 
     bool
+    CrossQuery(FlattenInterfacePtr& data,
+               GraphInterfacePtr& graph,
+               Vector<std::pair<int64_t, int64_t>>& meta_graphs,
+               Vector<Linklist>& merged_graph,
+               int64_t idx);
+
+    bool
     SetDataAndGraph(FlattenInterfacePtr& data, GraphInterfacePtr& graph, Vector<LabelType>& ids);
+
+    void
+    PrintGraphStats() const;
 
 private:
     tl::expected<std::vector<int64_t>, Error>

@@ -96,6 +96,9 @@ public:
     bool
     Build(const uint32_t* valid_ids = nullptr, int64_t data_num = 0);
 
+    bool
+    Build(Vector<Linklist>& graph_data);
+
     void
     SaveGraph(std::stringstream& out);
 
@@ -113,6 +116,9 @@ private:
 
     void
     init_graph();
+
+    void
+    init_external_graph();
 
     void
     update_neighbors(Vector<UnorderedSet<uint32_t>>& old_neighbors,
