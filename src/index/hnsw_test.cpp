@@ -1076,3 +1076,4 @@ TEST_CASE("merge graphs", "[ut][hnsw]") {
     auto merge_result = index->Merge(merge_units);
 
 }
+

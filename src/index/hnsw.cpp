@@ -191,8 +191,8 @@ HNSW::knn_search_internal(const DatasetPtr& query,
                           const std::string& parameters,
                           const FilterType& filter_obj) const {
     if (filter_obj) {
-        BitsetOrCallbackFilter filter(filter_obj);
-        return this->knn_search(query, k, parameters, &filter);
+        auto filter = std::make_shared<UniqueFilter>(filter_obj);
+        return this->knn_search(query, k, parameters, filter);
     }
     return this->knn_search(query, k, parameters, nullptr);
 };
@@ -201,7 +201,7 @@ tl::expected<DatasetPtr, Error>
 HNSW::knn_search(const DatasetPtr& query,
                  int64_t k,
                  const std::string& parameters,
-                 BaseFilterFunctor* filter_ptr) const {
+                 const FilterPtr filter_ptr) const {
 #ifndef ENABLE_TESTS
     SlowTaskTimer t_total("hnsw knnsearch", 20);
 #endif
@@ -241,8 +241,11 @@ HNSW::knn_search(const DatasetPtr& query,
             if (use_conjugate_graph_ and params.use_conjugate_graph_search) {
                 k = std::max(k, LOOK_AT_K);
             }
-            results = alg_hnsw_->searchKnn(
-                (const void*)(vector), k, std::max(params.ef_search, k), filter_ptr);
+            results = alg_hnsw_->searchKnn((const void*)(vector),
+                                           k,
+                                           std::max(params.ef_search, k),
+                                           filter_ptr,
+                                           params.skip_ratio);
         } catch (const std::runtime_error& e) {
             LOG_ERROR_AND_RETURNS(ErrorType::INTERNAL_ERROR,
                                   "failed to perofrm knn_search(internalError): ",
@@ -315,8 +318,8 @@ HNSW::range_search_internal(const DatasetPtr& query,
                             const FilterType& filter_obj,
                             int64_t limited_size) const {
     if (filter_obj) {
-        BitsetOrCallbackFilter filter(filter_obj);
-        return this->range_search(query, radius, parameters, &filter, limited_size);
+        auto filter = std::make_shared<UniqueFilter>(filter_obj);
+        return this->range_search(query, radius, parameters, filter, limited_size);
     }
     return this->range_search(query, radius, parameters, nullptr, limited_size);
 };
@@ -325,7 +328,7 @@ tl::expected<DatasetPtr, Error>
 HNSW::range_search(const DatasetPtr& query,
                    float radius,
                    const std::string& parameters,
-                   BaseFilterFunctor* filter_ptr,
+                   const FilterPtr filter_ptr,
                    int64_t limited_size) const {
 #ifndef ENABLE_TESTS
     SlowTaskTimer t("hnsw rangesearch", 20);
@@ -1125,10 +1128,10 @@ cross_query(const std::vector<MergeUnit>& merge_units,
 tl::expected<void, Error>
 HNSW::merge(const std::vector<MergeUnit>& merge_units) {
     auto param = std::make_shared<FlattenDataCellParameter>();
-    param->io_parameter_ = std::make_shared<MemoryIOParameter>();
+    param->io_parameter_ = std::make_shared<MemoryBlockIOParameter>();
     param->quantizer_parameter_ = std::make_shared<FP32QuantizerParameter>();
     GraphDataCellParamPtr graph_param_ptr = std::make_shared<GraphDataCellParameter>();
-    graph_param_ptr->io_parameter_ = std::make_shared<vsag::MemoryIOParameter>();
+    graph_param_ptr->io_parameter_ = std::make_shared<vsag::MemoryBlockIOParameter>();
     graph_param_ptr->max_degree_ = max_degree_ * 2;
 
     FlattenInterfacePtr flatten_interface =
